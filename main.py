@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from vercel.queue import send
 
 from store import result_store
+# Added: reuse the same simple logic from the CLI in the web API.
+from tool import shout
 
 logger = logging.getLogger("queue-subscribers")
 logger.setLevel(logging.INFO)
@@ -43,6 +45,16 @@ INDEX_HTML = """
       grid-template-columns: repeat(2, minmax(0, 1fr));
       border-top: 1px solid #eaeaea;
       border-left: 1px solid #eaeaea;
+    }
+    /* Added: styles for the simple text-to-output GUI. */
+    .shout-form { display: grid; gap: 16px; }
+    .shout-result {
+      min-height: 58px;
+      padding: 12px;
+      border: 1px solid #e1e1e1;
+      background: #fafafa;
+      color: #000;
+      overflow-wrap: anywhere;
     }
     .card {
       padding: 24px;
@@ -172,6 +184,15 @@ INDEX_HTML = """
         <output id="details">Submit a task to begin.</output>
       </section>
 
+      <!-- Added: small GUI for calling the shared shout tool. -->
+      <form id="shout-form" class="card wide shout-form" aria-labelledby="shout-title">
+        <h2 id="shout-title">Shout</h2>
+        <label for="shout-input">Text</label>
+        <input id="shout-input" type="text" placeholder="Type something" required>
+        <button id="shout-button" type="submit">Add !</button>
+        <output id="shout-result" class="shout-result" aria-live="polite">Your result will appear here.</output>
+      </form>
+
       <form id="check-form" class="card wide" aria-labelledby="check-title">
         <h2 id="check-title">Check a task</h2>
         <label for="task-id">Task ID</label>
@@ -191,6 +212,11 @@ INDEX_HTML = """
     const statusBadge = document.querySelector("#status");
     const answer = document.querySelector("#answer");
     const details = document.querySelector("#details");
+    // Added: elements for the simple shout GUI.
+    const shoutForm = document.querySelector("#shout-form");
+    const shoutButton = document.querySelector("#shout-button");
+    const shoutInput = document.querySelector("#shout-input");
+    const shoutResult = document.querySelector("#shout-result");
     let pollTimer;
 
     function renderStatus(status, detail, result = "—") {
@@ -260,6 +286,28 @@ INDEX_HTML = """
       event.preventDefault();
       checkTask();
     });
+
+    // Added: send GUI input to the Python API and display its response.
+    shoutForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      shoutButton.disabled = true;
+      shoutResult.textContent = "Working...";
+
+      try {
+        const response = await fetch("/shout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: shoutInput.value }),
+        });
+        if (!response.ok) throw new Error(`Request failed (${response.status})`);
+        const result = await response.json();
+        shoutResult.textContent = result.result;
+      } catch (error) {
+        shoutResult.textContent = error.message;
+      } finally {
+        shoutButton.disabled = false;
+      }
+    });
   </script>
 </body>
 </html>
@@ -271,9 +319,20 @@ class Operands(BaseModel):
     right: int | float
 
 
+# Added: request model for the simple text tool.
+class ShoutInput(BaseModel):
+  text: str
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index() -> HTMLResponse:
     return HTMLResponse(INDEX_HTML)
+
+
+# Added: web endpoint that exposes the same function as cli.py.
+@app.post("/shout")
+async def shout_text(payload: ShoutInput) -> dict[str, str]:
+  return {"result": shout(payload.text)}
 
 
 async def create_task(

@@ -12,6 +12,26 @@ https://python-queue-subscribers.labs.vercel.dev/
 
 The FastAPI app publishes addition and multiplication tasks with `vercel.queue.send`. The subscriber configuration in `pyproject.toml` points to `tasks.py`, where decorated handlers process messages from the `add` and `multiply` topics. Results are shared through a local SQLite file during development and Vercel Runtime Cache when deployed. The dashboard polls for each task until its result is available.
 
+## Simple CLI and Web Tool
+
+The added `tool.py` contains one shared function. Run it from the terminal with:
+
+```bash
+python cli.py hello world
+# hello world!
+```
+
+The same function is available to the deployed FastAPI app at `POST /shout`:
+
+```bash
+curl -X POST https://your-project.vercel.app/shout \
+	-H "Content-Type: application/json" \
+	-d '{"text":"hello"}'
+# {"result":"hello!"}
+```
+
+The root page now includes a small Shout form that calls this endpoint and displays the result. A separate frontend can use the same request shape: send JSON with a `text` field to `/shout`, then display the returned `result` field.
+
 ## Running Locally
 
 ```bash
